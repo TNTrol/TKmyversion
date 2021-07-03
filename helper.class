@@ -1,0 +1,11 @@
+.source Main.j
+.class public Main
+.super java/lang/Object
+
+.method public static main([Ljava/lang/String;)V
+.limit stack 2
+.limit locals 2
+
+invokestatic Main.main()V
+return
+.end method

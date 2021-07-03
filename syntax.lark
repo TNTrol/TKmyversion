@@ -1,0 +1,125 @@
+%import common.DIGIT
+%import common.ESCAPED_STRING
+%import common.CNAME
+%import common.NEWLINE
+%import common.WS
+%import common.C_COMMENT
+%import common.CPP_COMMENT
+%import common.LETTER
+%import common.SIGNED_NUMBER
+%import common.NUMBER
+%import common.FLOAT
+%import common.INT
+
+%ignore WS
+%ignore CPP_COMMENT
+%ignore C_COMMENT
+
+HEX_NUMBER.2: /0x[\da-f]*/i
+OCT_NUMBER.2: /0o[0-7]*/i
+BIN_NUMBER.2 : /0b[0-1]*/i
+
+ADD:     "+"
+SUB:     "-"
+MUL:     "*"
+DIV:     "/"
+AND:     "&&"
+OR:      "||"
+BIT_AND: "&"
+BIT_OR:  "|"
+GE:      ">="
+LE:      "<="
+NEQUALS: "!="
+EQUALS:  "=="
+GT:      ">"
+LT:      "<"
+ARR:     "[]"
+
+
+num: ( HEX_NUMBER | NUMBER | OCT_NUMBER | BIN_NUMBER) -> literal
+
+!_factor_op: "+" | "-"
+
+str: ESCAPED_STRING  -> literal
+LETTER2: ("А".."я")+
+ident: CNAME
+array_indexing: ident "[" expr "]"
+
+?group: num | str | array_indexing
+    | ident
+    | call
+    | "(" expr ")"
+
+call:  ident "(" ( expr ( "," expr )* )? ")"
+
+?factor: (_factor_op factor) | group
+
+?mult: factor
+    | mult ( MUL | DIV ) group  -> bin_op
+
+?add: mult
+    | add ( ADD | SUB ) mult  -> bin_op
+
+?compare1: add
+    | add ( GT | LT | GE | LE ) add  -> bin_op
+
+?compare2: compare1
+    | compare1 ( EQUALS | NEQUALS ) compare1  -> bin_op
+
+?logical_and: compare2
+    | logical_and AND compare2  -> bin_op
+
+?logical_or: logical_and
+    | logical_or OR logical_and  -> bin_op
+
+?expr: logical_or
+
+?var_decl_inner: ident
+    | ident "=" expr  -> assign
+
+vars_decl: ident var_decl_inner ( "," var_decl_inner )*
+    | array_declaration "=" expr -> assign
+
+array_declaration: ident ident "[" expr "]"
+
+?simple_stmt: ident "=" expr  -> assign
+    | call
+    | array_indexing "=" expr -> assign
+    | expr
+
+?for_stmt_list: vars_decl
+    | ( simple_stmt ( "," simple_stmt )* )?  -> stmt_list
+
+?for_cond: expr
+    |   -> stmt_list
+
+?body: stmt
+    | ";"  -> stmt_list
+
+?argument: array_declaration
+    | ident ident
+
+argument_list: (argument ( "," argument )*)?
+
+return_type: ident | (ident ARR)
+
+function: return_type ident "(" argument_list ")" "{" stmt_list "}"
+
+?stmt: ";" -> stmt_list
+    | "while" "(" expr ")" body -> while
+    | vars_decl ";"
+    | "if" "(" expr ")" body -> if
+    | "if" "(" expr ")" body "else" body  -> if
+    | "for" "(" for_stmt_list ";" for_cond ";" for_stmt_list ")" body  -> for
+    | "{" stmt_list "}"
+    | simple_stmt ";"
+    | function
+    | array_declaration ";"
+    | "return" expr? ";" -> return
+
+stmt_list: stmt*
+
+?prog: stmt_list
+
+?start: prog
+
