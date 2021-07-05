@@ -1,14 +1,19 @@
-void test(int a, int b)
+void test(int a, int b, int n)
+{
+if(n <= 0)
 {
 print(a);
+return;
+}
+int c = b;
+ n = n - 1;
+ b = a + b;
+test(c, b, n );
 }
 
 void main(){
-    int a = 10, g = 1, b = a, v = 10 + a + g;
-    test(a, b);
-    if(a <= 2)
-        print(b);
-    print(v);
+    int a = 0, b = 1, n = 10;
+    test(a, b, n);
 }
 
 //int a[1];

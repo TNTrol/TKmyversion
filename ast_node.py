@@ -400,6 +400,8 @@ class IfNode(StmtNode):
         self.cond = cond
         self.then_stmt = then_stmt
         self.else_stmt = else_stmt
+        self.cond_from_str = {'LE': 'gt', 'LT': 'ge' , 'EQ': 'ne', 'NE': 'eq', 'GE': 'lt', 'GT': 'le'}
+        self.counter = 0
 
     @property
     def children(self) -> Tuple[ExprNode, StmtNode, Optional[StmtNode]]:
@@ -417,6 +419,28 @@ class IfNode(StmtNode):
         return 'if'
 
     def to_bytecode(self, generation: Generation) -> str:
+        if isinstance(self.cond.arg1, IdentNode):
+            index = self.cond.arg1.to_bytecode(generation)
+            generation.add(f'iload {index}')
+        else:
+            self.cond.arg1.to_bytecode(generation)
+        if isinstance(self.cond.arg2, IdentNode):
+            index = self.cond.arg2.to_bytecode(generation)
+            generation.add(f'iload {index}')
+        else:
+            self.cond.arg2.to_bytecode(generation)
+        _else = self.counter
+        self.counter += 1
+        generation.add(f'if_icmp{self.cond_from_str[self.cond.op.name]} label{_else}')
+        self.then_stmt.to_bytecode(generation)
+        if self.else_stmt is not None:
+            if generation.get_last_line().find('return') < 0:
+                generation.add(f'goto label{_else + 1}')
+            generation.add(f'label{_else}:')
+            _else = self.counter
+            self.counter += 1
+            self.else_stmt.to_bytecode(generation)
+        generation.add(f'label{_else}:')
         pass
 
 
@@ -714,15 +738,24 @@ class ReturnNode(StmtNode):
         return [self.expr] if self.expr else list()
 
     def semantic_check(self, scope: IdentScope) -> None:
-        self.expr.semantic_check(IdentScope(scope))
+        if self.expr is not None:
+            self.expr.semantic_check(IdentScope(scope))
         func = scope.curr_func
         if func is None:
             self.semantic_error('Оператор return применим только к функции')
-        self.expr = type_convert(self.expr, func.func.type.return_type, self, 'возвращаемое значение')
+        if self.expr is not None:
+            self.expr = type_convert(self.expr, func.func.type.return_type, self, 'возвращаемое значение')
         self.node_type = TypeDesc.VOID
 
     def __str__(self) -> str:
         return 'return'
+
+    def to_bytecode(self, generation: Generation) -> str:
+        if self.expr is None:
+            generation.add('return')
+            return
+        self.expr.to_bytecode(generation)
+        pass
 
 
 class _GroupNode(AstNode):

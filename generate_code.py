@@ -75,3 +75,6 @@ class Generation:
 
 	def get_type(self, name):
 		return self.var_counter[name].type
+
+	def get_last_line(self):
+		return self.code[-1]

@@ -9,34 +9,45 @@
 invokestatic Main.main()V
 return
 .end method
-.method public static test(II)V
-.limit stack 2
-.limit locals 2
+.method public static test(III)V
+.limit stack 3
+.limit locals 4
+iload 2
+iconst_0
+if_icmpgt label0
 getstatic java/lang/System.out Ljava/io/PrintStream;
 iload 0
 invokevirtual java/io/PrintStream.println(I)V
 return
+label0:
+iload 1
+istore 3
+iload 2
+iconst_1
+isub
+istore 2
+iload 0
+iload 1
+iadd
+istore 1
+iload 3
+iload 1
+iload 2
+invokestatic Main.test(III)V
+return
 .end method
 .method public static main()V
-.limit stack 2
-.limit locals 4
-bipush 10
+.limit stack 3
+.limit locals 3
+iconst_0
 istore 0
 iconst_1
 istore 1
-iload 0
-istore 2
 bipush 10
+istore 2
 iload 0
-iadd
 iload 1
-iadd
-istore 3
-iload 0
 iload 2
-invokestatic Main.test(II)V
-getstatic java/lang/System.out Ljava/io/PrintStream;
-iload 3
-invokevirtual java/io/PrintStream.println(I)V
+invokestatic Main.test(III)V
 return
 .end method
