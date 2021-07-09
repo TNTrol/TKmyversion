@@ -12,7 +12,9 @@ test(c, b, n );
 }
 
 void main(){
-    int a = 0, b = 1, n = 10;
+    int a = 0, b = 1, g, n = 9;
+    g = a * 12 + 7.9 * 1.0;
+    print(g);
     test(a, b, n);
 }
 

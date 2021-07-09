@@ -32,7 +32,7 @@ if __name__ == '__main__':
         help = open('helper.class', 'r')
         text = help.read()
         help.close()
-        out = open('main.class', 'w')
+        out = open('main.j', 'w')
         out.write(text + '\n' + str(gen))
         out.close()
     except semantic.SemanticException as e:

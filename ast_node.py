@@ -23,7 +23,6 @@ def checkNameIsKeywordAndRaiseException(name: str, text: str):
     if name.upper() in KeyWords.__dict__:
         raise Exception("Using keyword in name of " + text)
 
-
 class AstNode(ABC):
 
     init_action: Callable[['AstNode'], None] = None
@@ -59,7 +58,7 @@ class AstNode(ABC):
     def semantic_check(self, scope: IdentScope) -> None:
         pass
 
-    def to_bytecode(self, generation: Generation) -> str:
+    def to_bytecode(self, generation: Generation):
         pass
 
     @property
@@ -81,8 +80,44 @@ class AstNode(ABC):
         return self.children[index] if index < len(self.children) else None
 
 
+
+def load(node: AstNode, generation: Generation)->str:
+    if isinstance(node, IdentNode):
+        index, type_var = node.to_bytecode(generation)
+        generation.add(f'{type_var}load {index}')
+        generation.add_to_size(1)
+        return type_var
+    elif isinstance(node, LiteralNode):
+        value, type_var = node.to_bytecode(generation)
+        if type_var == 'f':
+            value = f'fconst_{int(value)}' if value == -1 or value == 0 or value == 1 or value == 2 or value == 3 or value == 4 or value == 5 else f'ldc {value}'
+        elif (type_var == 'c' or type_var == 'i') and -129 < value < 128:
+            value = f'iconst_{value}' if -1 < value < 6 else 'const_m1' if value == -1 else f'bipush {value}'
+        elif type_var == 'i':
+            value = f'sipush {value}' if -32768 <= value <= 32767 else f'ldc {value}'
+        else:
+            raise Exception('Неподходящий тип или размер')
+        generation.add(value)
+        generation.add_to_size(1)
+        return type_var
+    else:
+        return node.to_bytecode(generation)
+
+
+def cast_type(index: int, type1: str, type2: str, generation: Generation) -> str:
+    if type1 == type2:
+        return type1
+    if type1 == 'f':
+        generation.add(f'{type2}2f')
+        return 'f'
+    if type2 == 'f':
+        generation.insert(index, f'{type1}2f')
+        return 'f'
+
+
 class ExprNode(AstNode):
     pass
+
 
 EMPTY_IDENT = IdentDesc('', TypeDesc.VOID)
 
@@ -110,18 +145,8 @@ class LiteralNode(ExprNode):
     def __str__(self) -> str:
         return '{0} ({1})'.format(self.literal, type(self.value).__name__)
 
-    def to_bytecode(self, generation: Generation) -> str:
-        generation.add_to_size(1)
-        val = self.value if self.node_type == TypeDesc.FLOAT or self.value > 5 or self.value < -1 else ( f'iconst_{self.value}' if self.value > -1 else 'iconst_m1')
-        val = val if self.node_type == TypeDesc.CHAR or self.node_type == TypeDesc.INT else f'fconst_{int(self.value)}' if self.value == -1 or self.value == 0 or self.value == 1 or self.value == 2 or self.value == 3 or self.value == 4 or self.value == 5 else self.value
-        if self.node_type != TypeDesc.FLOAT and self.value > -2 and self.value < 6:
-            generation.add(val)
-            return
-        if type(val) == str:
-            generation.add(val)
-            return
-        load = 'bipush' if self.node_type == TypeDesc.INT or self.node_type == TypeDesc.CHAR else 'ldc'
-        generation.add(f'{load} {val}')
+    def to_bytecode(self, generation: Generation):
+        return self.value, str(self.node_type)[0].lower()
 
 class FactorNode(ExprNode):
     def __init__(self, operation: str, literal: ExprNode,
@@ -157,8 +182,8 @@ class IdentNode(ExprNode):
     def __str__(self) -> str:
         return str(self.name)
 
-    def to_bytecode(self, generation: Generation) -> str:
-        return str(generation.get_var(self.name))
+    def to_bytecode(self, generation: Generation):
+        return generation.get_var(self.name)
 
 class BinOpNode(ExprNode):
     def __init__(self, op: BinOp, arg1: ExprNode, arg2: ExprNode,
@@ -211,19 +236,13 @@ class BinOpNode(ExprNode):
         ))
 
     def to_bytecode(self, generation: Generation) -> str:
-        if isinstance(self.arg1, IdentNode):
-            generation.add(f'{str(self.arg1.node_type)[0]}load {self.arg1.to_bytecode(generation)}')
-            generation.add_to_size(1)
-        else:
-            self.arg1.to_bytecode(generation)
-        if isinstance(self.arg2, IdentNode):
-            generation.add(f'{str(self.arg1.node_type)[0]}load {self.arg2.to_bytecode(generation)}')
-            generation.add_to_size(1)
-        else:
-            self.arg2.to_bytecode(generation)
-        generation.add(f'i{str(self.op.name).lower()}')
+        t1 = load(self.arg1.expr if isinstance(self.arg1, TypeConvertNode) else self.arg1, generation)
+        index = generation.get_index_current_line()
+        t2 = load(self.arg2.expr if isinstance(self.arg2, TypeConvertNode) else self.arg2, generation)
+        t = cast_type(index, t1, t2, generation)
+        generation.add(f'{t}{str(self.op.name).lower()}')
         generation.add_to_size(-1)
-        return ' '
+        return t
 
     def __str__(self) -> str:
         return str(self.op.value)
@@ -259,10 +278,9 @@ class VarsDeclNode(StmtNode):
         self.node_type = TypeDesc.VOID
 
     def to_bytecode(self, generation: Generation) -> str:
-        #type_load = ("ISTORE", "BIPUSH") if self.vars_type.name == "char" or self.vars_type.name == "int" else ("FSTORE", "LDC")
         for child in self.vars_list:
             if isinstance(child, IdentNode):
-                child.to_bytecode(generation)
+                generation.set_variable(child.name, str(child.node_type))
                 continue
             child.to_bytecode(generation)
         return ""
@@ -334,26 +352,17 @@ class CallNode(StmtNode):
     def to_bytecode(self, generation: Generation) -> str:
         if self.func.name == 'print':
             if isinstance(self.params[0], IdentNode):
-                index = self.params[0].to_bytecode(generation)
-                type = generation.get_type(self.params[0].name)
-                generation.add(f'''getstatic java/lang/System.out Ljava/io/PrintStream;\n{type.lower()}load {index}\ninvokevirtual java/io/PrintStream.println({type})V''')
-            # elif isinstance(self.params[0], LiteralNode):
-            #     val = self.params[0].value
-            #     res = ()
-            #     if type(val) == int:
-            #         res = ()
-            return
+                generation.add('getstatic java/lang/System.out Ljava/io/PrintStream;')
+                type = load(self.params[0], generation)
+                generation.add(f'invokevirtual java/io/PrintStream.println({type.upper()})V')
+            return 'v'
         str_type = ''
-        count = 0
+        count = generation.get_size()
         for param in self.params:
-            index = param.to_bytecode(generation)
-            type = generation.get_type(param.name)
-            str_type += type
-            generation.add(f'{type.lower()}load {index}')
-            count += 1
-        generation.add_to_size(count)
-        generation.add_to_size(-count)
-        generation.add(f'invokestatic Main.{self.func.name}({str_type}){str(self.func.node_type).upper()[0]}')
+            str_type += load(param, generation)
+        generation.add_to_size(count - generation.get_size())
+        generation.add(f'invokestatic Main.{self.func.name}({str_type.upper()}){str(self.func.node_type)[0].upper()}')
+        return str(self.func.node_type)[0].upper()
 
 class AssignNode(StmtNode):
     def __init__(self, var: IdentNode, val: ExprNode,
@@ -382,14 +391,11 @@ class AssignNode(StmtNode):
 
     def to_bytecode(self, generation: Generation) -> str:
         type_load = ("istore", "bipush") if self.node_type == TypeDesc.CHAR or self.node_type == TypeDesc.INT else ("fstore", "ldc")
-        index = generation.get_var(self.var.name)
-        if isinstance(self.val, IdentNode):
-            index2 = self.val.to_bytecode(generation)
-            load = ("iload", "bipush") if self.val.node_type == TypeDesc.CHAR or self.val.node_type == TypeDesc.INT else ("fload", "ldc")
-            generation.add(f"{load[0]} {index2}")
-        else:
-            self.val.to_bytecode(generation)
         generation.set_variable(self.var.name, str(self.var.node_type))
+        index, type_var = generation.get_var(self.var.name)
+        t1 = load(self.val, generation)
+        if type_var != t1:
+            generation.add(f'{t1}2{type_var}')
         generation.add(f"{type_load[0]} {index}")
         generation.add_to_size(-generation.get_size())
 
@@ -419,16 +425,9 @@ class IfNode(StmtNode):
         return 'if'
 
     def to_bytecode(self, generation: Generation) -> str:
-        if isinstance(self.cond.arg1, IdentNode):
-            index = self.cond.arg1.to_bytecode(generation)
-            generation.add(f'iload {index}')
-        else:
-            self.cond.arg1.to_bytecode(generation)
-        if isinstance(self.cond.arg2, IdentNode):
-            index = self.cond.arg2.to_bytecode(generation)
-            generation.add(f'iload {index}')
-        else:
-            self.cond.arg2.to_bytecode(generation)
+        load(self.cond.arg1, generation)
+        load(self.cond.arg2, generation)
+        generation.add_to_size(-2)
         _else = self.counter
         self.counter += 1
         generation.add(f'if_icmp{self.cond_from_str[self.cond.op.name]} label{_else}')
