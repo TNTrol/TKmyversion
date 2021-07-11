@@ -14,7 +14,7 @@ return
 .limit locals 4
 iload 2
 iconst_0
-if_icmpgt label0
+if_icmpge label0
 getstatic java/lang/System.out Ljava/io/PrintStream;
 iload 0
 invokevirtual java/io/PrintStream.println(I)V
@@ -36,9 +36,30 @@ iload 2
 invokestatic Main.test(III)V
 return
 .end method
+.method public static rec(III)I
+.limit stack 5
+.limit locals 3
+iload 2
+iconst_1
+if_icmpgt label0
+iload 0
+iload 1
+iadd
+ireturn
+label0:
+iload 1
+iload 0
+iload 1
+iadd
+iload 2
+iconst_1
+isub
+invokestatic Main.rec(III)I
+ireturn
+.end method
 .method public static main()V
 .limit stack 4
-.limit locals 4
+.limit locals 5
 iconst_0
 istore 0
 iconst_1
@@ -55,9 +76,12 @@ fmul
 fadd
 f2i
 istore 2
+iconst_1
+i2f
+fstore 4
 getstatic java/lang/System.out Ljava/io/PrintStream;
-iload 2
-invokevirtual java/io/PrintStream.println(I)V
+fload 4
+invokevirtual java/io/PrintStream.println(F)V
 iload 0
 iload 1
 iload 3

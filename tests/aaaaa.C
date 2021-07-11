@@ -1,6 +1,6 @@
 void test(int a, int b, int n)
 {
-if(n <= 0)
+if(n < 0)
 {
 print(a);
 return;
@@ -10,13 +10,33 @@ int c = b;
  b = a + b;
 test(c, b, n );
 }
+int rec(int a, int b, int n)
+{
+if(n <= 1)
+    return a + b;
+return rec(b, a+b, n - 1);
+}
 
 void main(){
     int a = 0, b = 1, g, n = 9;
     g = a * 12 + 7.9 * 1.0;
-    print(g);
+    float h = 1;
+    print(h);
     test(a, b, n);
+    //int a = rec(0, 1, 9);
+//    //int a = 0, b = 1, n = 9;
+//    print(rec(0, 1, 9));
+    //print(print(1));
 }
+//int sum(int a, int b)
+//{
+//    return a + b;
+//}
+//void main()
+//{
+//    int a = sum(10, 20);
+//    print(a);
+//}
 
 //int a[1];
 //a[3 < 4];

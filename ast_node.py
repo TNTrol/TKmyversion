@@ -317,6 +317,9 @@ class CallNode(StmtNode):
         if self.func.name == 'print':
             self.node_type = TypeDesc.VOID
             self.func.node_type = TypeDesc.VOID
+            self.params[0].semantic_check(scope)
+            if self.params[0].node_type == TypeDesc.VOID:
+                raise Exception('Аргумент не может быть типом void')
             return
         params = []
         error = False
@@ -351,18 +354,19 @@ class CallNode(StmtNode):
 
     def to_bytecode(self, generation: Generation) -> str:
         if self.func.name == 'print':
-            if isinstance(self.params[0], IdentNode):
-                generation.add('getstatic java/lang/System.out Ljava/io/PrintStream;')
-                type = load(self.params[0], generation)
-                generation.add(f'invokevirtual java/io/PrintStream.println({type.upper()})V')
+            generation.add('getstatic java/lang/System.out Ljava/io/PrintStream;')
+            type = load(self.params[0], generation)
+            generation.add(f'invokevirtual java/io/PrintStream.println({type.upper()})V')
             return 'v'
         str_type = ''
         count = generation.get_size()
         for param in self.params:
             str_type += load(param, generation)
+        if self.node_type != TypeDesc.VOID:
+            generation.add_to_size(1)
         generation.add_to_size(count - generation.get_size())
-        generation.add(f'invokestatic Main.{self.func.name}({str_type.upper()}){str(self.func.node_type)[0].upper()}')
-        return str(self.func.node_type)[0].upper()
+        generation.add(f'invokestatic Main.{self.func.name}({str_type.upper()}){str(self.node_type)[0].upper()}')
+        return str(self.node_type)[0].lower()
 
 class AssignNode(StmtNode):
     def __init__(self, var: IdentNode, val: ExprNode,
@@ -716,11 +720,12 @@ class FunctionNode(StmtNode):
             generation.set_variable(str(arg.name), str(arg.type_var), True)
             generation.add_to_size(1)
             s += str(arg.type_var).upper()[0]
-        generation.add(str(f".method public static {self.name}({s}){str(self.node_type).upper()[0]}"), True)
+        generation.add(str(f".method public static {self.name}({s}){str(self.type.type).upper()[0]}"), True)
         generation.add_to_size(-generation.get_size())
         for stmt in self.children[3].children:
             stmt.to_bytecode(generation)
-        generation.add("return")
+        if generation.get_last_line().find('return') == -1:
+            generation.add("return")
         generation.add('.end method')
         generation.clear_vars()
         return ""
@@ -744,7 +749,7 @@ class ReturnNode(StmtNode):
             self.semantic_error('Оператор return применим только к функции')
         if self.expr is not None:
             self.expr = type_convert(self.expr, func.func.type.return_type, self, 'возвращаемое значение')
-        self.node_type = TypeDesc.VOID
+        self.node_type = TypeDesc.VOID if func.func.type.return_type == TypeDesc.VOID else func.func.type.return_type
 
     def __str__(self) -> str:
         return 'return'
@@ -753,7 +758,11 @@ class ReturnNode(StmtNode):
         if self.expr is None:
             generation.add('return')
             return
-        self.expr.to_bytecode(generation)
+        type_expr = load(self.expr, generation)
+        type_return = str(self.node_type)[0].lower()
+        if type_return != type_expr:
+            generation.add(f'{type_expr}2{type_return}')
+        generation.add(f'{type_return}return')
         pass
 
 
@@ -788,6 +797,9 @@ class TypeConvertNode(ExprNode):
 
     def __str__(self) -> str:
         return 'convert'
+
+    def to_bytecode(self, generation: Generation):
+        return load(self.expr,generation)
 
     @property
     def childs(self) -> Tuple[AstNode, ...]:
